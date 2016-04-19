@@ -1,8 +1,8 @@
 using MXNet
 
-function make_model(style_layers, content_layer)
-    # model is pre-trained
-    trained_weights = load("model/vgg19.params")
+function make_vgg19_executor(input_size, style_layers, content_layer)
+    # model is pre-trained, get NDarray of weights
+    trained_weights = mx.load("model/vgg19.params")
 
     # VGG model without fully-connected layers
     data = mx.Variable(:data)
@@ -53,4 +53,6 @@ function make_model(style_layers, content_layer)
     conv5_1 = mx.Convolution(name=:conv5_1, data=pool4, num_filter=512, pad=(1,1),
         kernel=(3,3), stride=(1,1), no_bias=false, workspace=1024)
     relu5_1 = mx.Activation(name=:relu5_1, data=conv5_1, act_type=:relu)
+
+    mx.infer_shape(, data=input_size)
 end

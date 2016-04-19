@@ -1,5 +1,13 @@
 #!/usr/bin/julia
 
+function preprocess_vgg19()
+
+end
+
+function postprocess_vgg19()
+
+end
+
 function imgstyle(arg_map)
 
 end
