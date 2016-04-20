@@ -1,13 +1,12 @@
 #!/usr/bin/julia
 
-using Images, Colors, FixedPointNumbers, DocOpt
+using MXNet, Images, Colors, FixedPointNumbers, DocOpt
 
 # Imagenet mean pixel
 mean_rgb = (103.939, 116.779, 123.68)
 
 # VGG19 expects a specific image format
-function preprocess_vgg(img, out_size)
-    img = Images.imresize(img, out_size)
+function preprocess_vgg(img)
     arr = 256 * data(separate(convert(Image{BGR{Float32}}, img)))
     arr[:,:,1] -= mean_rgb[3]
     arr[:,:,2] -= mean_rgb[2]
@@ -15,19 +14,37 @@ function preprocess_vgg(img, out_size)
     return arr
 end
 
-# undo preprocessing
+# Undo preprocessing
 function postprocess_vgg(arr)
     arr[:,:,1] += mean_rgb[3]
     arr[:,:,2] += mean_rgb[2]
     arr[:,:,3] += mean_rgb[1]
     arr /= 256.0
-    return convert(Image, arr)
+    return convert(Image{RGB{Float32}}, arr)
+end
+
+# E.g. "1,2,3" -> (1,2,3)
+str2inttup(str) = tuple(map(x -> parse(Int32, x), split(str, ','))...)
+
+# E.g. "relu1_1,relu2_2" -> [relu1_1, relu2_2]
+str2symbols(str) = map(mx.Variable, split(str, ','))
+
+function make_gramian_executor()
+
+end
+
+function style_representation()
+
+end
+
+function content_representation()
+
 end
 
 usage = """IMGStyle.
 
 Usage:
-    imgstyle.jl [options] <content_img> <style_img> 
+    imgstyle.jl [options] <content_img> <style_img>
     imgstyle.jl -h | --help
 
 Options:
@@ -53,17 +70,30 @@ gpu_context = mx.gpu()
 content_img = imread(arg_map["<content_image>"])
 style_img = imread(arg_map["<style_image>"])
 
-# determine output resolution
+# Determine output resolution
 out_size_str = arg_map["--output_size"]
-out_size = if out_size_str != nothing
-    split(out_size_str, ',')
-else
+out_size = if out_size_str == nothing
     size(content_img)
+else
+    str2inttup(out_size_str)
 end
 
-content_arr = preprocess_vgg19(content_img, out_size)
-style_arr = preprocess_vgg19(style_img, out_size)
+# Only resize content image because the content loss function requires matching
+# shape with output image. Style loss uses correlation between filters
+# (Gramian), where shape is defined only by the # of filters.
+content_img = Images.imresize(content_img, out_size)
 
-# create GPU-backed NDArrays
+content_arr = preprocess_vgg19(content_img)
+style_arr = preprocess_vgg19(style_img)
+
+# Create GPU-backed NDArrays for input images
 content_nd = mx.copy(content_arr, gpu_context)
 style_nd = mx.copy(style_arr, gpu_context)
+
+# Get symbols for specified layers
+style_layers = str2symbols(arg_map["--style_layers"])
+content_layer = str2symbols(arg_map["--content_layer"])
+
+# Create VGG19 executor
+vgg_exec =
+    make_vgg19_executor(out_size, style_layers, content_layer, gpu_context)
