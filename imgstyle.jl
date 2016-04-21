@@ -19,7 +19,7 @@ function postprocess_vgg(arr)
     arr[:,:,1] += mean_rgb[3]
     arr[:,:,2] += mean_rgb[2]
     arr[:,:,3] += mean_rgb[1]
-    arr /= 256.0
+    arr /= 256
     return convert(Image{RGB{Float32}}, arr)
 end
 
@@ -29,8 +29,37 @@ str2inttup(str) = tuple(map(x -> parse(Int32, x), split(str, ','))...)
 # E.g. "relu1_1,relu2_2" -> [relu1_1, relu2_2]
 str2symbols(str) = map(mx.Variable, split(str, ','))
 
-function make_gramian_executor()
+type GramianExecutor
+    executor :: mx.Executor
+    data :: mx.NDArray
+    data_grad :: mx.NDArray
+end
 
+function make_gramian_executor(in_shape, context)
+    # Each entry of the Gramian matrix is the correllation between activations
+    # of two filters in a layer
+    style_relu1 = mx.Variable(:style_relu1)
+    style_relu2 = mx.Variable(:style_relu2)
+
+    # Flatten the activation for each filter to form a matrix where each column
+    # is one filter's activation
+    flat_shape = (reduce(*, in_shape[1:end-1]), in_shape[end])
+    flat_act1 = mx.Reshape(data=style_relu1, target_shape=flat_shape)
+    flat_act2 = mx.Reshape(data=style_relu2, target_shape=flat_shape)
+
+    # Dot all 2-combinations of activations to create Gramian. This is
+    # equivalent to matrix self-multiplication with transpose or a MLP where the
+    # input and weights are each others transpose.
+    flat_act2 = mx.SwapAxis(data=flat_act2, dim1=)
+    fc = mx.FullyConnected(data=flat_act1, weight=flat_act2, no_bias=true,
+        num_hidden=in_shape[end])
+
+    # Bind the same NDArray to both
+    data_nd = mx.zeros(in_shape, context)
+    data_grad_nd = mx.zeros(in_shape, context)
+    exec = fc.bind()
+
+    return GramianExecutor(exec, )
 end
 
 function style_representation()
@@ -94,6 +123,11 @@ style_nd = mx.copy(style_arr, gpu_context)
 style_layers = str2symbols(arg_map["--style_layers"])
 content_layer = str2symbols(arg_map["--content_layer"])
 
-# Create VGG19 executor
+# Multiple executors form the entire network
 vgg_exec =
     make_vgg19_executor(out_size, style_layers, content_layer, gpu_context)
+gram_execs = [make_gramian_executor(size(ndarr), gpu_context)
+    for ndarr in vgg_exec.style_activations]
+
+style_rep = style_representation()
+content_rep = content_representation()
