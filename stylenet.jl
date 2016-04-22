@@ -79,8 +79,29 @@ type StyleNet
             push!(net.content_repr, net.exec.outputs[i])
         end
 
+        # Initialize data to noise for optimization
+        net.arg_map[:data][:] = 100 * rand(content_data_size)
+
         return net
     end
+end
+
+function update(net :: StyleNet)
+    mx.forward(net.exec)
+
+    # Calculate output gradients
+    num_content = size(net.content_layers, 1)
+    num_style = size(net.style_layers, 1)
+    for i = 1:num_content
+        net.content_grad[i] = l2_gradient(net.content_repr[i], net.outputs[i])
+    end
+    for i = 1:num_style
+        net.style_grad[i] =
+            l2_gradient(net.style_repr[i], net.outputs[num_content + i])
+    end
+    net.tv_grad = tv_gradient(net.arg_map[:data])
+
+    mx.backward(net.exec, vcat(net.content_repr, net.style_repr))
 end
 
 function load_arguments!(

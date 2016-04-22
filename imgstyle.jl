@@ -57,4 +57,6 @@ content_layers = str2symbols(option_map["--content_layers"])
 stylenet = StyleNet(
     mx.gpu(), content_img, style_img, content_layers, style_layers)
 
+while
 
+end
