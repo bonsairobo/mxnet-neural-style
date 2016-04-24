@@ -5,7 +5,7 @@ using MXNet, Images, DocOpt
 include("stylenet.jl")
 
 # E.g. "1,2,3" -> (1,2,3)
-str2inttup(str) = tuple(map(x -> parse(Int32, x), split(str, ','))...)
+str2inttup(str) = tuple(map(x -> parse(Int64, x), split(str, ','))...)
 
 # E.g. "relu1_1,relu2_2" -> [relu1_1, relu2_2]
 str2symbols(str) = map(Symbol, split(str, ','))
