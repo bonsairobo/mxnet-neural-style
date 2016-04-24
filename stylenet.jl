@@ -54,7 +54,17 @@ type StyleNet
             [], fill(mx.zeros((0,), ctx), num_style),
             [], fill(mx.zeros((0,), ctx), num_content))
 
-        get_style_representation(net, style_arr)
+        # img_data is already sized for style_arr from load_arguments
+        net.arg_map[:img_data][:] = style_arr
+
+        # Get Gramian matrices for style image
+        exec = make_executor(net)
+        println("after bind")
+        sleep(5)
+        mx.forward(exec)
+        for i = 1:num_style
+            push!(net.style_repr, exec.outputs[num_content + i])
+        end
 
         # Reset target shape in Reshape layer for content size by replacing
         # Gramian outputs
@@ -67,40 +77,23 @@ type StyleNet
         end
         net.node = node
 
-        get_content_representation(net, content_arr)
+        # Fit network shapes for the content image
+        net.arg_map[:img_data] = mx.copy(content_arr, net.ctx)
+        net.grad_map[:img_data] = mx.zeros(size(content_arr), net.ctx)
+
+        # Get ReLU output for content image
+        exec = make_executor(net)
+        println("after bind")
+        sleep(5)
+        mx.forward(exec)
+        for i = 1:num_content
+            push!(net.content_repr, exec.outputs[i])
+        end
 
         # Initialize data to noise for optimization
         net.arg_map[:img_data][:] = 100 * rand(size(content_arr))
 
         return net
-    end
-end
-
-function get_content_representation(net :: StyleNet, content_arr)
-    # Fit network shapes for the content image
-    net.arg_map[:img_data] = mx.copy(content_arr, net.ctx)
-    net.grad_map[:img_data] = mx.zeros(size(content_arr), net.ctx)
-
-    # Get ReLU output for content image
-    exec = make_executor(net)
-    mx.forward(exec)
-    num_content = size(net.style_repr, 1)
-    for i = 1:num_content
-        push!(net.content_repr, exec.outputs[i])
-    end
-end
-
-function get_style_representation(net :: StyleNet, style_arr)
-    # img_data is already sized for style_arr from load_arguments
-    net.arg_map[:img_data][:] = style_arr
-
-    # Get Gramian matrices for style image
-    exec = make_executor(net)
-    mx.forward(exec)
-    num_style = size(net.style_repr, 1)
-    num_content = size(net.content_repr, 1)
-    for i = 1:num_style
-        push!(net.style_repr, exec.outputs[num_content + i])
     end
 end
 
@@ -148,6 +141,8 @@ end
 
 function make_executor(net :: StyleNet)
     gc()
+    println("GC before bind")
+    sleep(5)
     # Create new executor with different input/output shapes
     return mx.bind(net.node, net.ctx, net.arg_map, args_grad=net.grad_map)
 end
