@@ -8,8 +8,10 @@ include("stylenet.jl")
 str2inttup(str) = tuple(map(x -> parse(Int32, x), split(str, ','))...)
 
 # E.g. "relu1_1,relu2_2" -> [relu1_1, relu2_2]
-str2symbols(str) = map(mx.Variable, split(str, ','))
+str2symbols(str) = map(Symbol, split(str, ','))
 
+# Fixed Bug: doctopt strings must have >1 spaces between option names and
+# description/default strings
 usage = """IMGStyle.
 
 Usage:
@@ -17,25 +19,25 @@ Usage:
     imgstyle.jl -h | --help
 
 Options:
-    -h, --help                      Show this screen.
-    --output OUT_NAME               Provide a name for the output file. [default: out.png]
+    -h, --help                       Show this screen.
+    --output OUT_NAME                Provide a name for the output file. [default: out.png]
     --output_size OUT_SIZE
-    --num_iter N_ITER               [default: 1000]
-    --save_iter SAVE_ITER           [default: 100]
-    --print_iter PRINT_ITER         [default: 10]
-    --learning_rate LEARNING_RATE   [default: 0.1]
-    --style_weight STYLE_WEIGHT     [default: 0.5]
-    --content_weight CONTENT_WEIGHT [default: 0.5]
-    --content_layers CONTENT_LAYERS [default: relu4_2]
-    --style_layers STYLE_LAYERS     [default: relu1_1,relu2_1,relu3_1,relu4_1,relu5_1]
+    --num_iter N_ITER                [default: 1000]
+    --save_iter SAVE_ITER            [default: 100]
+    --print_iter PRINT_ITER          [default: 10]
+    --learning_rate LEARNING_RATE    [default: 0.1]
+    --content_weight CONTENT_WEIGHT  [default: 0.5]
+    --style_weight STYLE_WEIGHT      [default: 0.5]
+    --content_layers CONTENT_LAYERS  [default: relu4_2]
+    --style_layers STYLE_LAYERS      [default: relu1_1,relu2_1,relu3_1,relu4_1,relu5_1]
     --init_style
     --init_content
     --init_img INIT_IMG
 """
 option_map = docopt(usage)
 
-content_img = imread(option_map["<content_image>"])
-style_img = imread(option_map["<style_image>"])
+content_img = load(option_map["<content_img>"])
+style_img = load(option_map["<style_img>"])
 
 # Determine output resolution
 out_size_str = option_map["--output_size"]
@@ -57,6 +59,3 @@ content_layers = str2symbols(option_map["--content_layers"])
 stylenet = StyleNet(
     mx.gpu(), content_img, style_img, content_layers, style_layers)
 
-while
-
-end
