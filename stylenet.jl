@@ -44,10 +44,16 @@ type StyleNet
             node = mx.Group(node, gram)
         end
 
+        println("no mem?")
+        sleep(5)
+
         # Allocate GPU memory for arguments and their gradients
         arg_names = mx.list_arguments(node)
         arg_map, grad_map =
             load_arguments!(ctx, arg_names, arg_shapes, "model/vgg19.params")
+
+        println("after load args")
+        sleep(5)
 
         # Create executor for calculating style representation
         net = new(ctx, node, arg_map, grad_map,
@@ -82,6 +88,7 @@ type StyleNet
         net.grad_map[:img_data] = mx.zeros(size(content_arr), net.ctx)
 
         # Get ReLU output for content image
+        exec = 0
         exec = make_executor(net)
         println("after bind")
         sleep(5)
