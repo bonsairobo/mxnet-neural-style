@@ -44,8 +44,8 @@ type StyleNet
             node = mx.Group(node, gram)
         end
 
-        println("no mem?")
-        sleep(5)
+        println("start with 0 GPU mem")
+        sleep(3)
 
         # Allocate GPU memory for arguments and their gradients
         arg_names = mx.list_arguments(node)
@@ -53,24 +53,39 @@ type StyleNet
             load_arguments!(ctx, arg_names, arg_shapes, "model/vgg19.params")
 
         println("after load args")
-        sleep(5)
+        sleep(3)
 
-        # Create executor for calculating style representation
+        gc() # Clean up unused zero NDArrays
+
+        println("after gc()")
+        sleep(3)
+
         net = new(ctx, node, arg_map, grad_map,
             [], fill(mx.zeros((0,), ctx), num_style),
             [], fill(mx.zeros((0,), ctx), num_content))
 
+        println("after dummy mx.zeros, should not change mem usage")
+        sleep(3)
+
         # img_data is already sized for style_arr from load_arguments
         net.arg_map[:img_data][:] = style_arr
 
-        # Get Gramian matrices for style image
+        println("after NDArray assignment, should not change mem usage")
+        sleep(3)
+
         exec = make_executor(net)
+
         println("after bind")
-        sleep(5)
+        sleep(3)
+        
+        # Get Gramian matrices for style image
         mx.forward(exec)
         for i = 1:num_style
             push!(net.style_repr, exec.outputs[num_content + i])
         end
+
+        println("after copying output NDArrays, should not change mem usage")
+        sleep(3)
 
         # Reset target shape in Reshape layer for content size by replacing
         # Gramian outputs
@@ -83,19 +98,35 @@ type StyleNet
         end
         net.node = node
 
+        println("after symbolic Gramian creation, should not change mem usage")
+        sleep(3)
+
         # Fit network shapes for the content image
         net.arg_map[:img_data] = mx.copy(content_arr, net.ctx)
         net.grad_map[:img_data] = mx.zeros(size(content_arr), net.ctx)
 
-        # Get ReLU output for content image
+        println("after content image & gradient creation")
+        sleep(3)
+
         exec = 0
+        gc()
+
+        println("after gc() of exec")
+        sleep(3)
+
         exec = make_executor(net)
+
         println("after bind")
-        sleep(5)
+        sleep(3)
+    
+        # Get ReLU output for content image
         mx.forward(exec)
         for i = 1:num_content
             push!(net.content_repr, exec.outputs[i])
         end
+
+        println("after copying output NDArrays, should not change mem usage")
+        sleep(3)
 
         # Initialize data to noise for optimization
         net.arg_map[:img_data][:] = 100 * rand(size(content_arr))
@@ -141,15 +172,11 @@ function load_arguments!(
     for name in arg_names[2:end] # skip :data
         arg_map[name] = pretrain[symbol("arg:" * string(name))]
     end
-    gc() # Clean up unused zero NDArrays
 
     return (arg_map, grad_map)
 end
 
 function make_executor(net :: StyleNet)
-    gc()
-    println("GC before bind")
-    sleep(5)
     # Create new executor with different input/output shapes
     return mx.bind(net.node, net.ctx, net.arg_map, args_grad=net.grad_map)
 end
