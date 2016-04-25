@@ -23,6 +23,8 @@ type StyleNet
     # Total Variation gradient for image
     tv_grad :: mx.NDArray
 
+    style_out_shapes :: Array{Tuple,1}
+
     function StyleNet(ctx, content_img, style_img, content_layers, style_layers)
         style_arr = preprocess_vgg(style_img)
         content_arr = preprocess_vgg(content_img)
@@ -31,7 +33,7 @@ type StyleNet
         num_style = size(style_layers, 1)
 
         # Get symbolic nodes for loss from VGGNet layers
-        loss_nodes = make_vggnet(vcat(content_layers, style_layers))
+        loss_nodes = vcat(content_layers, style_layers) |> make_vggnet
 
         arg_shapes, out_shapes, =
             mx.infer_shape(mx.Group(loss_nodes...), img_data=size(content_arr))
@@ -50,48 +52,73 @@ type StyleNet
 
         # Finalize network / make executor
         exec = mx.bind(node, ctx, arg_map, args_grad=grad_map)
-        net = new(ctx, exec, node, arg_map, grad_map,
-            [], fill(mx.zeros((0,), ctx), num_style),
-            [], fill(mx.zeros((0,), ctx), num_content))
+
+        # Allocate GPU memory for output gradients
+        style_grad =
+            map(x -> mx.zeros(size(x), ctx), exec.outputs[num_content+1:end])
+        content_grad =
+            map(x -> mx.zeros(size(x), ctx), exec.outputs[1:num_content])
 
         # Get Gramian matrices for style image
-        net.arg_map[:img_data][:] = style_arr
-        mx.forward(net.exec)
-        for i = 1:num_style
-            push!(net.style_repr, exec.outputs[num_content + i])
-        end
+        arg_map[:img_data][:] = style_arr
+        mx.forward(exec)
+        style_repr = exec.outputs[num_content+1:end]
     
         # Get ReLU output for content image
-        net.arg_map[:img_data][:] = content_arr
-        mx.forward(net.exec)
-        for i = 1:num_content
-            push!(net.content_repr, exec.outputs[i])
-        end
+        arg_map[:img_data][:] = content_arr
+        mx.forward(exec)
+        content_repr = exec.outputs[1:num_content]
 
         # Initialize data to noise for optimization
-        net.arg_map[:img_data][:] = 100 * rand(content_arr)
+        arg_map[:img_data][:] = 100 * rand(content_arr)
 
-        return net
+        return new(ctx, exec, node, arg_map, grad_map,
+            style_repr, style_grad, content_repr, content_grad,
+            mx.zeros((0,), ctx), out_shapes)
     end
 end
 
-function update(net :: StyleNet)
-    mx.forward(net.exec)
+function optimize(net :: StyleNet)
+    lr = mx.LearningRate.Exp(0.1)
+    sgd = mx.SGD(
+        lr = 0.1,
+        momentum = 0.9,
+        weight_decay = 0.005,
+        lr_scheduler = lr,
+        grad_clip = 10)
+    sgd_state = mx.create_state(sgd, 0, net.arg_map[:img_data])
+    sgd.state = mx.OptimizationState(1)
 
-    # Calculate output gradients
-    num_content = size(net.content_repr, 1)
-    num_style = size(net.style_repr, 1)
-    for i = 1:num_content
-        net.content_grad[i][:] =
-            l2_gradient(net.outputs[i], net.content_repr[i])
-    end
-    for i = 1:num_style
-        net.style_grad[i][:] =
-            l2_gradient(net.outputs[num_content + i], net.style_repr[i])
-    end
-    #net.tv_grad = tv_gradient(net.arg_map[:data])
+    for epoch = 1:5
+        mx.forward(net.exec)
 
-    mx.backward(net.exec, vcat(net.content_repr, net.style_repr))
+        # Calculate output gradients
+        num_content = size(net.content_repr, 1)
+        num_style = size(net.style_repr, 1)
+        for i = 1:num_content
+            net.content_grad[i][:] = net.exec.outputs[i] - net.content_repr[i]
+        end
+        for i = 1:num_style
+            net.style_grad[i][:] =
+                net.exec.outputs[num_content+i] - net.style_repr[i]
+            net.style_grad[i][:] /=
+                (net.style_out_shapes[num_content+i][3] ^ 2) *
+                reduce(*, net.style_out_shapes[num_content+i][1:2])
+        end
+        #net.tv_grad = tv_gradient(net.arg_map[:data])
+
+        mx.backward(net.exec, vcat(net.content_grad, net.style_grad))
+
+        # Update image
+        mx.update(
+            sgd, 0, net.arg_map[:img_data], net.grad_map[:img_data], sgd_state)
+    end
+
+    # Convert NDArray into Image
+    out_arr = net.arg_map[:img_data] |> size |> zeros
+    copy!(out_arr, net.arg_map[:img_data])
+    println(out_arr[:,:,:,1])
+    return postprocess_vgg(out_arr[:,:,:,1])
 end
 
 function load_arguments(

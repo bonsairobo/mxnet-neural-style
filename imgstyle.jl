@@ -87,11 +87,20 @@ else
     str2inttup(out_size_str)
 end
 content_img = Images.imresize(content_img, out_size)
+
+# I think it's necessary to maintain the original aspect ratio of the style
+# image to get the best result. Arbitrary resizing of the style image would
+# change the style representation (assuming the style representation is not
+# affine invariant). This is also a hack around the memory limitations of
+# multiple executors in a garbage-collected language.
 style_img = best_overlap(style_img, content_img)
 
 # Get symbols for specified layers
 style_layers = str2symbols(option_map["--style_layers"])
 content_layers = str2symbols(option_map["--content_layers"])
 
+# Construct and run the neural style network
 stylenet = StyleNet(
     mx.gpu(), content_img, style_img, content_layers, style_layers)
+output_img = optimize(stylenet)
+save("output.png", output_img)
