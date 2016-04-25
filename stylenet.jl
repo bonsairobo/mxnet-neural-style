@@ -79,6 +79,8 @@ type StyleNet
         net.arg_map[:img_data] = mx.copy(content_arr, net.ctx)
         net.grad_map[:img_data] = mx.zeros(size(content_arr), net.ctx)
 
+        println("before free")
+        sleep(5)
         finalize(exec.handle)
         for out in exec.outputs
             finalize(out.handle)
