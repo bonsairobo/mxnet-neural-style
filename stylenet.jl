@@ -85,6 +85,8 @@ type StyleNet
         for out in exec.outputs
             finalize(out.handle)
         end
+        exec = 0
+        gc()
         println("tried to free")
         sleep(5)
         exec = make_executor(net)
