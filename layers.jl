@@ -14,9 +14,9 @@ function make_gramian(layer, in_shape)
 end
 
 function l2_gradient(nd1 :: mx.NDArray, nd2 :: mx.NDArray)
-    
+    return nd1 - nd2
 end
 
 function tv_gradient(img_nd :: mx.NDArray)
-
+	return 
 end

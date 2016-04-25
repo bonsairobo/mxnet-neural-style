@@ -5,6 +5,7 @@ include("layers.jl")
 
 type StyleNet
     ctx :: mx.Context
+    exec :: mx.Executor
 
     # All output (loss) nodes & arguments in the network
     node :: mx.SymbolicNode
@@ -29,16 +30,14 @@ type StyleNet
         num_content = size(content_layers, 1)
         num_style = size(style_layers, 1)
 
-        # Make loss groups from VGGNet layers
+        # Get symbolic nodes for loss from VGGNet layers
         loss_nodes = make_vggnet(vcat(content_layers, style_layers))
-        content_group = mx.Group(loss_nodes[1:num_content]...)
-        loss_group = mx.Group(loss_nodes...)
 
         arg_shapes, out_shapes, =
-            mx.infer_shape(loss_group, img_data=size(style_arr))
+            mx.infer_shape(mx.Group(loss_nodes...), img_data=size(content_arr))
 
         # Replace style layer outputs with Gramian outputs
-        node = content_group
+        node = mx.Group(loss_nodes[1:num_content]...)
         for (i, layer) in enumerate(loss_nodes[num_content+1:end])
             gram = make_gramian(layer, out_shapes[num_content + i])
             node = mx.Group(node, gram)
@@ -47,58 +46,30 @@ type StyleNet
         # Allocate GPU memory for arguments and their gradients
         arg_names = mx.list_arguments(node)
         arg_map, grad_map =
-            load_arguments!(ctx, arg_names, arg_shapes, "model/vgg19.params")
+            load_arguments(ctx, arg_names, arg_shapes, "model/vgg19.params")
 
-        net = new(ctx, node, arg_map, grad_map,
+        # Finalize network / make executor
+        exec = mx.bind(node, ctx, arg_map, args_grad=grad_map)
+        net = new(ctx, exec, node, arg_map, grad_map,
             [], fill(mx.zeros((0,), ctx), num_style),
             [], fill(mx.zeros((0,), ctx), num_content))
 
-        # img_data is already sized for style_arr from load_arguments
-        net.arg_map[:img_data][:] = style_arr
-
-        exec = make_executor(net)
-        
         # Get Gramian matrices for style image
-        mx.forward(exec)
+        net.arg_map[:img_data][:] = style_arr
+        mx.forward(net.exec)
         for i = 1:num_style
             push!(net.style_repr, exec.outputs[num_content + i])
         end
-
-        # Reset target shape in Reshape layer for content size by replacing
-        # Gramian outputs
-        arg_shapes, out_shapes, =
-            mx.infer_shape(loss_group, img_data=size(content_arr))
-        node = content_group
-        for (i, layer) in enumerate(loss_nodes[num_content+1:end])
-            gram = make_gramian(layer, out_shapes[num_content + i])
-            node = mx.Group(node, gram)
-        end
-        net.node = node
-
-        # Fit network shapes for the content image
-        net.arg_map[:img_data] = mx.copy(content_arr, net.ctx)
-        net.grad_map[:img_data] = mx.zeros(size(content_arr), net.ctx)
-
-        println("before free")
-        sleep(5)
-        finalize(exec.handle)
-        for out in exec.outputs
-            finalize(out.handle)
-        end
-        exec = 0
-        gc()
-        println("tried to free")
-        sleep(5)
-        exec = make_executor(net)
     
         # Get ReLU output for content image
-        mx.forward(exec)
+        net.arg_map[:img_data][:] = content_arr
+        mx.forward(net.exec)
         for i = 1:num_content
             push!(net.content_repr, exec.outputs[i])
         end
 
         # Initialize data to noise for optimization
-        net.arg_map[:img_data][:] = 100 * rand(size(content_arr))
+        net.arg_map[:img_data][:] = 100 * rand(content_arr)
 
         return net
     end
@@ -111,18 +82,19 @@ function update(net :: StyleNet)
     num_content = size(net.content_repr, 1)
     num_style = size(net.style_repr, 1)
     for i = 1:num_content
-        net.content_grad[i] = l2_gradient(net.content_repr[i], net.outputs[i])
+        net.content_grad[i][:] =
+            l2_gradient(net.outputs[i], net.content_repr[i])
     end
     for i = 1:num_style
-        net.style_grad[i] =
-            l2_gradient(net.style_repr[i], net.outputs[num_content + i])
+        net.style_grad[i][:] =
+            l2_gradient(net.outputs[num_content + i], net.style_repr[i])
     end
-    net.tv_grad = tv_gradient(net.arg_map[:data])
+    #net.tv_grad = tv_gradient(net.arg_map[:data])
 
     mx.backward(net.exec, vcat(net.content_repr, net.style_repr))
 end
 
-function load_arguments!(
+function load_arguments(
     ctx,
     arg_names :: Array{Symbol,1},
     arg_shapes :: Array{Tuple,1},
@@ -143,9 +115,4 @@ function load_arguments!(
     end
 
     return (arg_map, grad_map)
-end
-
-function make_executor(net :: StyleNet)
-    # Create new executor with different input/output shapes
-    return mx.bind(net.node, net.ctx, net.arg_map, args_grad=net.grad_map)
 end
