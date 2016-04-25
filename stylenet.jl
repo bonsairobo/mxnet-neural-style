@@ -53,9 +53,6 @@ type StyleNet
             [], fill(mx.zeros((0,), ctx), num_style),
             [], fill(mx.zeros((0,), ctx), num_content))
 
-        println("after dummy mx.zeros, should not change mem usage")
-        sleep(5)
-
         # img_data is already sized for style_arr from load_arguments
         net.arg_map[:img_data][:] = style_arr
 
@@ -83,6 +80,9 @@ type StyleNet
         net.grad_map[:img_data] = mx.zeros(size(content_arr), net.ctx)
 
         finalize(exec.handle)
+        for out in exec.outputs
+            finalize(out.handle)
+        end
         exec = make_executor(net)
     
         # Get ReLU output for content image
