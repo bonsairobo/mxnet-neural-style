@@ -83,6 +83,8 @@ type StyleNet
         for out in exec.outputs
             finalize(out.handle)
         end
+        println("tried to free")
+        sleep(5)
         exec = make_executor(net)
     
         # Get ReLU output for content image
