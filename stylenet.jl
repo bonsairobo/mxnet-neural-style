@@ -73,6 +73,10 @@ type StyleNet
         # Initialize data to noise for optimization
         arg_map[:img_data][:] = 200 * (rand(content_arr) - 0.5)
 
+        tmp = zeros(content_arr)
+        copy!(tmp, arg_map[:img_data])
+        println(tmp[1:5,1:5,1,1])
+
         return new(ctx, exec, node, arg_map, grad_map,
             style_repr, style_grad, content_repr, content_grad,
             mx.zeros((0,), ctx), out_shapes)
@@ -118,7 +122,6 @@ function optimize(net :: StyleNet)
     # Convert NDArray into Image
     out_arr = net.arg_map[:img_data] |> size |> zeros
     copy!(out_arr, net.arg_map[:img_data])
-    println(out_arr[100:110,100:110,:,1])
     return postprocess_vgg(out_arr)
 end
 
