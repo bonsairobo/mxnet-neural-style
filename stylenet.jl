@@ -52,6 +52,7 @@ type StyleNet
         arg_map, grad_map =
             load_arguments(ctx, arg_names, arg_shapes, "model/vgg19.params")
 
+        # Save visualization of the network
         gviz = mx.to_graphviz(node, title="Style Network")
         f = open("network_viz.txt", "w")
         write(f, gviz)
@@ -113,6 +114,8 @@ end
                 reduce(*, net.style_out_shapes[num_content+i][1:2])
         end
         #net.tv_grad = tv_gradient(net.arg_map[:data])
+
+        @bp
 
         mx.backward(net.exec, vcat(net.content_grad, net.style_grad))
 
