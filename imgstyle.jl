@@ -14,9 +14,9 @@ overlap_area(size1, size2) = reduce(*, min(size1, size2))
 
 function crop_center(img, crop_size)
     imsize = img |> size |> collect
-    tl = floor((imsize - crop_size) / 2) + 1
+    tl = Array{Int64}(floor((imsize - crop_size) / 2) + 1)
     br = tl + crop_size - 1
-    return subim(img, "x", tl[1]:br[1], "y", tl[2]:br[2])
+    return copyproperties(img, img[tl[1]:br[1], tl[2]:br[2]])
 end
 
 function best_overlap(img1, img2)
