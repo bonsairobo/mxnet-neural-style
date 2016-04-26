@@ -60,15 +60,27 @@ type StyleNet
         content_grad =
             map(x -> mx.zeros(size(x), ctx), exec.outputs[1:num_content])
 
+        tmp = zeros(content_arr)
+        copy!(tmp, arg_map[:img_data])
+        println(tmp[1:5,1:5,1,1])
+
         # Get Gramian matrices for style image
         arg_map[:img_data][:] = style_arr
         mx.forward(exec)
         style_repr = exec.outputs[num_content+1:end]
+
+        tmp = zeros(content_arr)
+        copy!(tmp, arg_map[:img_data])
+        println(tmp[1:5,1:5,1,1])
     
         # Get ReLU output for content image
         arg_map[:img_data][:] = content_arr
         mx.forward(exec)
         content_repr = exec.outputs[1:num_content]
+
+        tmp = zeros(content_arr)
+        copy!(tmp, arg_map[:img_data])
+        println(tmp[1:5,1:5,1,1])
 
         # Initialize data to noise for optimization
         arg_map[:img_data][:] = 200 * (rand(content_arr) - 0.5)
