@@ -1,4 +1,5 @@
 using MXNet
+using Debug
 
 include("vggnet.jl")
 include("layers.jl")
@@ -26,7 +27,7 @@ type StyleNet
     # Needed for style gradient normalization
     style_out_shapes :: Array{Tuple,1}
 
-    function StyleNet(ctx, content_img, style_img, content_layers, style_layers)
+    @debug function StyleNet(ctx, content_img, style_img, content_layers, style_layers)
         style_arr = preprocess_vgg(style_img)
         content_arr = preprocess_vgg(content_img)
 
@@ -72,8 +73,8 @@ type StyleNet
 
         # Initialize data to noise for optimization
         init = 200 * (rand(content_arr) - 0.5)
-        println(init[1:10,1:10,1,1])
         arg_map[:img_data][:] = init
+        @bp
 
         return new(ctx, exec, node, arg_map, grad_map,
             style_repr, style_grad, content_repr, content_grad,
