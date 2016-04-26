@@ -1,5 +1,4 @@
 using MXNet
-using Debug
 
 include("vggnet.jl")
 include("layers.jl")
@@ -81,7 +80,7 @@ type StyleNet
     end
 end
 
-@debug function optimize(net :: StyleNet)
+function optimize(net :: StyleNet)
     lr = mx.LearningRate.Exp(0.1)
     sgd = mx.SGD(
         lr = 0.1,
@@ -92,7 +91,7 @@ end
     sgd_state = mx.create_state(sgd, 0, net.arg_map[:img_data])
     sgd.state = mx.OptimizationState(1)
 
-    for epoch = 1:10
+    for epoch = 1:25
         mx.forward(net.exec)
 
         # Calculate output gradients
@@ -115,8 +114,6 @@ end
         # Update image
         mx.update(
             sgd, 0, net.arg_map[:img_data], net.grad_map[:img_data], sgd_state)
-
-        @bp
     end
 
     # Convert NDArray into Image
