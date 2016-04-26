@@ -4,7 +4,7 @@ using Debug
 include("vggnet.jl")
 include("layers.jl")
 
-type StyleNet
+@debug type StyleNet
     ctx :: mx.Context
     exec :: mx.Executor
 
@@ -27,7 +27,7 @@ type StyleNet
     # Needed for style gradient normalization
     style_out_shapes :: Array{Tuple,1}
 
-    @debug function StyleNet(ctx, content_img, style_img, content_layers, style_layers)
+    function StyleNet(ctx, content_img, style_img, content_layers, style_layers)
         style_arr = preprocess_vgg(style_img)
         content_arr = preprocess_vgg(content_img)
 
