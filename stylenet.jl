@@ -72,7 +72,7 @@ type StyleNet
         content_repr = exec.outputs[1:num_content]
 
         # Initialize data to noise for optimization
-        init = 200 * (rand(content_arr) - 0.5)
+        init = 200 * (rand(size(content_arr)) - 0.5)
         arg_map[:img_data][:] = init
         @bp
 
@@ -93,7 +93,7 @@ function optimize(net :: StyleNet)
     sgd_state = mx.create_state(sgd, 0, net.arg_map[:img_data])
     sgd.state = mx.OptimizationState(1)
 
-    for epoch = 1:1
+    for epoch = 1:10
         mx.forward(net.exec)
 
         # Calculate output gradients
@@ -116,6 +116,8 @@ function optimize(net :: StyleNet)
         # Update image
         mx.update(
             sgd, 0, net.arg_map[:img_data], net.grad_map[:img_data], sgd_state)
+
+        @bp
     end
 
     # Convert NDArray into Image
