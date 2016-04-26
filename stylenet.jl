@@ -90,7 +90,7 @@ function optimize(net :: StyleNet)
     sgd_state = mx.create_state(sgd, 0, net.arg_map[:img_data])
     sgd.state = mx.OptimizationState(1)
 
-    for epoch = 1:5
+    for epoch = 1:1
         mx.forward(net.exec)
 
         # Calculate output gradients
@@ -118,7 +118,7 @@ function optimize(net :: StyleNet)
     # Convert NDArray into Image
     out_arr = net.arg_map[:img_data] |> size |> zeros
     copy!(out_arr, net.arg_map[:img_data])
-    println(out_arr[:,:,:,1])
+    println(out_arr[100:110,100:110,:,1])
     return postprocess_vgg(out_arr)
 end
 
