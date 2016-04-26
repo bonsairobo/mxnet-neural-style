@@ -1,4 +1,5 @@
 using MXNet
+using Debug
 
 include("vggnet.jl")
 include("layers.jl")
@@ -51,6 +52,9 @@ type StyleNet
         arg_map, grad_map =
             load_arguments(ctx, arg_names, arg_shapes, "model/vgg19.params")
 
+        gviz = to_graphviz(node, title="Style Network")
+        save("network_viz.txt", gviz)
+
         # Finalize network / make executor
         exec = mx.bind(node, ctx, arg_map, args_grad=grad_map)
 
@@ -71,8 +75,7 @@ type StyleNet
         content_repr = exec.outputs[1:num_content]
 
         # Initialize data to noise for optimization
-        init = 200 * (rand(size(content_arr)) - 0.5)
-        arg_map[:img_data][:] = init
+        arg_map[:img_data][:] = mx.rand(-0.1, 0.1, size(conent_arr))
 
         return new(ctx, exec, node, arg_map, grad_map,
             style_repr, style_grad, content_repr, content_grad,
@@ -80,7 +83,7 @@ type StyleNet
     end
 end
 
-function optimize(net :: StyleNet)
+@debug function optimize(net :: StyleNet)
     lr = mx.LearningRate.Exp(0.1)
     sgd = mx.SGD(
         lr = 0.1,
