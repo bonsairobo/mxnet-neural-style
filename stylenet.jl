@@ -53,7 +53,9 @@ type StyleNet
             load_arguments(ctx, arg_names, arg_shapes, "model/vgg19.params")
 
         gviz = mx.to_graphviz(node, title="Style Network")
-        save("network_viz.txt", gviz)
+        f = open("network_viz.txt", "w")
+        write(f, gviz)
+        close(f)
 
         # Finalize network / make executor
         exec = mx.bind(node, ctx, arg_map, args_grad=grad_map)
