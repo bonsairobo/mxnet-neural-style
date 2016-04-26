@@ -27,7 +27,7 @@ function best_overlap(img1, img2)
     overlap = overlap_area(size1, size2)
     flip_overlap = overlap_area(reverse(size1), size2)
     if flip_overlap > overlap
-        img1 = convert(Image, img1[:,:])
+        img1 = convert(Image, transpose(img1[:,:]))
         size1 = size(img1)
     end
 
@@ -45,7 +45,7 @@ function best_overlap(img1, img2)
     new_size = map(x -> Int64(ceil(scale*x)), size1)
     img1 = Images.imresize(img1, new_size)
 
-    # Crop img1 to the same size as img2
+    # Crop img1 (centered) to the same size as img2
     img1 = convert(Image, transpose(img1[1:size2[1], 1:size2[2]]))
     return img1
 end

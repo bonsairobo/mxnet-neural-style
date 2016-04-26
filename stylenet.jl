@@ -70,7 +70,7 @@ type StyleNet
         content_repr = exec.outputs[1:num_content]
 
         # Initialize data to noise for optimization
-        arg_map[:img_data][:] = 100 * rand(content_arr)
+        arg_map[:img_data][:] = 200 * (rand(content_arr) - 0.5)
 
         return new(ctx, exec, node, arg_map, grad_map,
             style_repr, style_grad, content_repr, content_grad,

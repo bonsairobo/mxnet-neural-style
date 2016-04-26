@@ -3,7 +3,8 @@ using MXNet, Images, Colors
 # ImageNet mean pixel
 mean_rgb = (103.939, 116.779, 123.68)
 
-img2BGRarray(img) = data(separate(convert(Image{BGR{Float32}}, img)))
+img2BGRarray(img) = convert(Image{BGR{Float32}}, img) |> separate |> data
+BGRarray2img(arr) = convert(Image{BGR{Float32}}, clamp(arr / 256, 0, 1))
 
 # VGG19 expects a specific image format
 function preprocess_vgg(img)
@@ -19,8 +20,7 @@ function postprocess_vgg(arr)
     arr[:,:,1] += mean_rgb[3]
     arr[:,:,2] += mean_rgb[2]
     arr[:,:,3] += mean_rgb[1]
-    arr /= 256
-    return convert(Image{BGR{Float32}}, arr)
+    return BGRarray2img(arr)
 end
 
 function make_vggnet(loss_symbols)
