@@ -44,7 +44,7 @@ function best_overlap(img1, img2)
     # Scale img1 to cover img2
     scale = maximum(size2 ./ size1)
     new_size = map(x -> Int64(ceil(scale * x)), size1)
-    img1 = Images.imresize(img1, new_size)
+    img1 = Images.imresize(img1, (new_size...))
 
     # Crop img1 (centered) to the same size as img2
     return copyproperties(img1, crop_center(img1, size2))
