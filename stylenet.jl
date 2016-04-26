@@ -52,7 +52,7 @@ type StyleNet
         arg_map, grad_map =
             load_arguments(ctx, arg_names, arg_shapes, "model/vgg19.params")
 
-        gviz = to_graphviz(node, title="Style Network")
+        gviz = mx.to_graphviz(node, title="Style Network")
         save("network_viz.txt", gviz)
 
         # Finalize network / make executor
