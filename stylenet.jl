@@ -23,6 +23,7 @@ type StyleNet
     # Total Variation gradient for image
     tv_grad :: mx.NDArray
 
+    # Needed for style gradient normalization
     style_out_shapes :: Array{Tuple,1}
 
     function StyleNet(ctx, content_img, style_img, content_layers, style_layers)
@@ -118,7 +119,7 @@ function optimize(net :: StyleNet)
     out_arr = net.arg_map[:img_data] |> size |> zeros
     copy!(out_arr, net.arg_map[:img_data])
     println(out_arr[:,:,:,1])
-    return postprocess_vgg(out_arr[:,:,:,1])
+    return postprocess_vgg(out_arr)
 end
 
 function load_arguments(

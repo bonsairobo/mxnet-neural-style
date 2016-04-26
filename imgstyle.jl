@@ -10,44 +10,44 @@ str2inttup(str) = tuple(map(x -> parse(Int64, x), split(str, ','))...)
 # E.g. "relu1_1,relu2_2" -> [relu1_1, relu2_2]
 str2symbols(str) = map(Symbol, split(str, ','))
 
-overlap_area(size1, size2) = min(size1[1], size2[1]) * min(size1[2], size2[2])
+overlap_area(size1, size2) = reduce(*, min(size1, size2))
+
+function crop_center(img, size)
+    imsize = img |> size |> collect
+    tl = floor((imsize - size) / 2) + 1
+    br = tl + size - 1
+    return subim(img, "x", tl[1]:br[1], "y", tl[2]:br[2])
+end
 
 function best_overlap(img1, img2)
-    size1 = size(img1)
-    size2 = size(img2)
+    size1 = img1 |> size |> collect
+    size2 = img2 |> size |> collect
 
     # Check if img1 already covers img2
-    if size1[1] >= size2[1] && size1[2] >= size2[2]
-        # Cut img2-sized region from img1 (no need to modify the scale)
-        img1 = convert(Image, transpose(img1[1:size2[1], 1:size2[2]]))
-        return img1
+    if all(size1 .> size2)
+        return copyproperties(img1, crop_center(img1, size2))
     end
 
     # Transpose img1 if it has greater overlap
     overlap = overlap_area(size1, size2)
     flip_overlap = overlap_area(reverse(size1), size2)
     if flip_overlap > overlap
-        img1 = convert(Image, transpose(img1[:,:]))
-        size1 = size(img1)
+        img1 = copyproperties(img1, transpose(img1[:,:]))
+        size1 = img1 |> size |> collect
     end
 
     # Check again if img1 covers img2
-    if size1[1] >= size2[1] && size1[2] >= size2[2]
-        # Cut img2-sized piece from img1 (no need to modify the scale)
-        img1 = convert(Image, transpose(img1[1:size2[1], 1:size2[2]]))
-        return img1
+    if all(size1 .> size2)
+        return copyproperties(img1, crop_center(im1, size2))
     end
 
     # Scale img1 to cover img2
-    scalex = size2[1] / size1[1]
-    scaley = size2[2] / size1[2]
-    scale = max(scalex, scaley)
-    new_size = map(x -> Int64(ceil(scale*x)), size1)
+    scale = maximum(size2 ./ size1)
+    new_size = map(x -> Int64(ceil(scale * x)), size1)
     img1 = Images.imresize(img1, new_size)
 
     # Crop img1 (centered) to the same size as img2
-    img1 = convert(Image, transpose(img1[1:size2[1], 1:size2[2]]))
-    return img1
+    return copyproperties(img1, crop_center(img1, size2))
 end
 
 # Fixed Bug: doctopt strings must have >1 spaces between option names and

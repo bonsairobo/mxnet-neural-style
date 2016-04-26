@@ -3,24 +3,29 @@ using MXNet, Images, Colors
 # ImageNet mean pixel
 mean_rgb = (103.939, 116.779, 123.68)
 
-img2BGRarray(img) = convert(Image{BGR{Float32}}, img) |> separate |> data
-BGRarray2img(arr) = convert(Image{BGR{Float32}}, clamp(arr / 256, 0, 1))
-
 # VGG19 expects a specific image format
 function preprocess_vgg(img)
-    arr = 256 * img2BGRarray(img)
-    arr[:,:,1] -= mean_rgb[3]
+    arr = 256 * (convert(Image{RGB{Float32}}, img) |> separate |> data)
+    arr[:,:,1] -= mean_rgb[1]
     arr[:,:,2] -= mean_rgb[2]
-    arr[:,:,3] -= mean_rgb[1]
+    arr[:,:,3] -= mean_rgb[3]
+    arr = arr[:,:,end:-1:1] # Switch to BGR
     return reshape(arr, (size(arr)...,1)) # Add batch dimension
 end
 
 # Undo preprocessing
 function postprocess_vgg(arr)
-    arr[:,:,1] += mean_rgb[3]
+    arr = arr[:,:,end:-1:1,1] # Switch to RGB & remove batch dimension
+    arr[:,:,1] += mean_rgb[1]
     arr[:,:,2] += mean_rgb[2]
-    arr[:,:,3] += mean_rgb[1]
-    return BGRarray2img(arr)
+    arr[:,:,3] += mean_rgb[3]
+    img = convert(Image{RGB{Float32}}, clamp(arr / 256, 0, 1))
+
+    # `convert` from array gives the image column-major ordering, but most
+    # image formats require row-major ordering
+    img["spatialorder"] = ["x", "y"]
+
+    return img
 end
 
 function make_vggnet(loss_symbols)
