@@ -4,7 +4,7 @@ using Debug
 include("vggnet.jl")
 include("layers.jl")
 
-@debug type StyleNet
+type StyleNet
     ctx :: mx.Context
     exec :: mx.Executor
 
@@ -74,7 +74,6 @@ include("layers.jl")
         # Initialize data to noise for optimization
         init = 200 * (rand(size(content_arr)) - 0.5)
         arg_map[:img_data][:] = init
-        @bp
 
         return new(ctx, exec, node, arg_map, grad_map,
             style_repr, style_grad, content_repr, content_grad,
@@ -82,7 +81,7 @@ include("layers.jl")
     end
 end
 
-function optimize(net :: StyleNet)
+@debug function optimize(net :: StyleNet)
     lr = mx.LearningRate.Exp(0.1)
     sgd = mx.SGD(
         lr = 0.1,
