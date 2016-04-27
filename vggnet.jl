@@ -2,7 +2,7 @@ using MXNet, Images, Colors
 
 include("executors.jl")
 
-function make_vgg_executor(loss_symbols, ctx)
+function make_vgg_executor(loss_symbols, content_size, ctx)
     # VGG model without fully-connected layers. Use AVG pooling for smoother
     # image optimization. Each layer has an explicit name to match a
     # pretrained model.
@@ -90,10 +90,9 @@ function make_vgg_executor(loss_symbols, ctx)
     )
 
     # Get nodes for loss symbols
-    node = map(s -> nodes[s], loss_symbols) |> mx.Group
+    node = mx.Group(map(s -> nodes[s], loss_symbols)...)
 
-    arg_shapes, out_shapes, =
-        mx.infer_shape(node, img_data=size(content_arr))
+    arg_shapes, out_shapes, = mx.infer_shape(node, img_data=content_size)
 
     # Allocate GPU memory for arguments and their gradients
     arg_names = mx.list_arguments(node)

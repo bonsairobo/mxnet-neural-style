@@ -24,7 +24,7 @@ function make_gramian_executor(in_shape, ctx)
     args = Dict(:gram_data => data_nd, :gram_weight => data_nd)
     grad = Dict(:gram_data => grad_nd)
     reqs = Dict(:gram_data => mx.GRAD_WRITE, :gram_weight => mx.GRAD_NOP)
-    exec = mx.bind(fc, ctx, args, args_grad=grad, grad_req=reqs)
+    exec = mx.bind(node, ctx, args, args_grad=grad, grad_req=reqs)
 
     return ExecutorData(node, exec, data_nd, grad_nd)
 end

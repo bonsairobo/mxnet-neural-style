@@ -68,4 +68,5 @@ content_layers = str2symbols(option_map["--content_layers"])
 stylenet = StyleNet(
     mx.gpu(), content_img, style_img, content_layers, style_layers)
 output_img = optimize(stylenet)
+println("Saving...")
 save("output.png", output_img)
