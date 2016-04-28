@@ -60,15 +60,12 @@ Options:
     -h, --help                       Show this screen.
     --output OUT_NAME                Provide a name for the output file. [default: out.png]
     --long_edge LONG_EDGE
-    --num_iter N_ITER                [default: 1000]
+    --num_iter N_ITER                [default: 500]
     --save_iter SAVE_ITER            [default: 100]
-    --print_iter PRINT_ITER          [default: 10]
-    --learning_rate LEARNING_RATE    [default: 0.1]
     --content_weight CONTENT_WEIGHT  [default: 0.5]
     --style_weight STYLE_WEIGHT      [default: 0.5]
     --content_layers CONTENT_LAYERS  [default: relu4_2]
     --style_layers STYLE_LAYERS      [default: relu1_1,relu2_1,relu3_1,relu4_1,relu5_1]
-    --starting_image STARTING_IMAGE
 """
 option_map = docopt(usage)
 

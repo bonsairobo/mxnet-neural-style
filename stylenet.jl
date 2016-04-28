@@ -93,7 +93,7 @@ function optimize(net :: StyleNet, option_map)
     sgd_state = mx.create_state(sgd, 0, net.arg_map[:img_data])
     sgd.state = mx.OptimizationState(1)
 
-    for epoch = 1:500
+    for epoch = 1:parse(option_map["--num_iter"])
         mx.forward(net.exec)
 
         # Calculate output gradients
