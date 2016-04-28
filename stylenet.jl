@@ -1,7 +1,7 @@
 using MXNet
 
 include("vggnet.jl")
-include("layers.jl")
+include("gramian.jl")
 
 type StyleNet
     ctx :: mx.Context
