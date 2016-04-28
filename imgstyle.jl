@@ -5,18 +5,12 @@ using MXNet, Images, DocOpt
 include("stylenet.jl")
 include("img_util.jl")
 
-# TODO: Implement poor man's gradient checker. Hack the Python implementation
-# to start with the same initial image as mine. Add I/O to serialize all
-# gradients. Open blobs in REPL and check which ones are not equal.
-
 # E.g. "1,2,3" -> (1,2,3)
 str2inttup(str) = tuple(map(x -> parse(Int64, x), split(str, ','))...)
 
 # E.g. "relu1_1,relu2_2" -> [relu1_1, relu2_2]
 str2symbols(str) = map(Symbol, split(str, ','))
 
-# Fixed Bug: doctopt strings must have >1 spaces between option names and
-# description/default strings
 usage = """IMGStyle.
 
 Usage:
@@ -68,5 +62,6 @@ content_layers = str2symbols(option_map["--content_layers"])
 stylenet = StyleNet(
     mx.gpu(), content_img, style_img, content_layers, style_layers)
 output_img = optimize(stylenet)
-println("Saving...")
-save("output.png", output_img)
+out_filename = "output.png"
+println("Saving output to 'output/$(out_filename)'")
+save(out_filename, output_img)

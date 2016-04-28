@@ -1,11 +1,37 @@
 using MXNet, Images, Colors
 
-include("executors.jl")
+# ImageNet mean pixel
+mean_rgb = (103.939, 116.779, 123.68)
 
-function make_vgg_executor(loss_symbols, content_size, ctx)
+# VGG19 expects a specific image format
+function preprocess_vgg(img)
+    arr = 256 * (convert(Image{RGB{Float32}}, img) |> separate |> data)
+    arr[:,:,1] -= mean_rgb[1]
+    arr[:,:,2] -= mean_rgb[2]
+    arr[:,:,3] -= mean_rgb[3]
+    arr = arr[:,:,end:-1:1] # Switch to BGR
+    return reshape(arr, (size(arr)...,1)) # Add batch dimension
+end
+
+# Undo preprocessing
+function postprocess_vgg(arr)
+    arr = arr[:,:,end:-1:1,1] # Switch to RGB & remove batch dimension
+    arr[:,:,1] += mean_rgb[1]
+    arr[:,:,2] += mean_rgb[2]
+    arr[:,:,3] += mean_rgb[3]
+    img = convert(Image{RGB{Float32}}, clamp(arr / 256, 0, 1))
+
+    # `convert` from array gives the image column-major ordering, but most
+    # image formats require row-major ordering
+    img["spatialorder"] = ["x", "y"]
+
+    return img
+end
+
+function make_vggnet(content_loss_sym, style_loss_sym)
     # VGG model without fully-connected layers. Use AVG pooling for smoother
-    # image optimization. Each layer has an explicit name to match a
-    # pretrained model.
+    # image optimization. Each layer has an explicit name to match a pretrained
+    # model.
     img_data = mx.Variable(:img_data)
     conv1_1 = mx.Convolution(name=:conv1_1, data=img_data, num_filter=64,
         pad=(1,1), kernel=(3,3), stride=(1,1), no_bias=false)
@@ -90,64 +116,7 @@ function make_vgg_executor(loss_symbols, content_size, ctx)
     )
 
     # Get nodes for loss symbols
-    node = mx.Group(map(s -> nodes[s], loss_symbols)...)
-
-    arg_shapes, out_shapes, = mx.infer_shape(node, img_data=content_size)
-
-    # Allocate GPU memory for arguments and their gradients
-    arg_names = mx.list_arguments(node)
-    arg_map, grad_map =
-        load_arguments(ctx, arg_names, arg_shapes, "model/vgg19.params")
-
-    # Make VGG executor
-    exec = mx.bind(node, ctx, arg_map, args_grad=grad_map)
-    exec_dat = ExecutorData(node, exec, arg_map[:img_data], grad_map[:img_data])
-
-    return (exec_dat, out_shapes)
-end
-
-function load_arguments(ctx, arg_names, arg_shapes, model_path)
-    # Model is pre-trained. Get map from symbol to NDArray of weights or biases.
-    pretrain = mx.load(model_path, mx.NDArray)
-
-    # Zero-initialize arguments and gradients
-    grad_map =
-        Dict(zip(arg_names, [mx.zeros(shape, ctx) for shape in arg_shapes]))
-    arg_map =
-        Dict(zip(arg_names, [mx.zeros(shape, ctx) for shape in arg_shapes]))
-
-    # Copy pre-trained weights and biases into new NDArrays
-    for name in arg_names[2:end] # skip :data
-        arg_map[name] = pretrain[symbol("arg:" * string(name))]
-    end
-
-    return (arg_map, grad_map)
-end
-
-# ImageNet mean pixel
-mean_rgb = (103.939, 116.779, 123.68)
-
-# VGG19 expects a specific image format
-function preprocess_vgg(img)
-    arr = 256 * (convert(Image{RGB{Float32}}, img) |> separate |> data)
-    arr[:,:,1] -= mean_rgb[1]
-    arr[:,:,2] -= mean_rgb[2]
-    arr[:,:,3] -= mean_rgb[3]
-    arr = arr[:,:,end:-1:1] # Switch to BGR
-    return reshape(arr, (size(arr)...,1)) # Add batch dimension
-end
-
-# Undo preprocessing
-function postprocess_vgg(arr)
-    arr = arr[:,:,end:-1:1,1] # Switch to RGB & remove batch dimension
-    arr[:,:,1] += mean_rgb[1]
-    arr[:,:,2] += mean_rgb[2]
-    arr[:,:,3] += mean_rgb[3]
-    img = convert(Image{RGB{Float32}}, clamp(arr / 256, 0, 1))
-
-    # `convert` from array gives the image column-major ordering, but most
-    # image formats require row-major ordering
-    img["spatialorder"] = ["x", "y"]
-
-    return img
+    content_nodes = map(s -> nodes[s], content_loss_sym)
+    style_nodes = map(s -> nodes[s], style_loss_sym)
+    return (content_nodes, style_nodes)
 end
