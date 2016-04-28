@@ -7,6 +7,8 @@ function make_gramian(layer, in_shape)
 
     # Multiply activation matrix by its transpose to make Gramian matrix
     reshape = mx.Reshape(data=layer, target_shape=flat_shape)
-    return mx.FullyConnected(data=reshape, weight=reshape, no_bias=true,
+    gram = mx.FullyConnected(data=reshape, weight=reshape, no_bias=true,
         num_hidden=flat_shape[2])
+
+    return gram
 end

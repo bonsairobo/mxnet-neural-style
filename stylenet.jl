@@ -1,122 +1,135 @@
 using MXNet
+using Debug
 
 include("vggnet.jl")
 include("gramian.jl")
 
 type StyleNet
     ctx :: mx.Context
-
-    # Save memory using single executor
     exec :: mx.Executor
 
-    img      :: mx.NDArray
-    img_grad :: mx.NDArray
+    # All output (loss) nodes & arguments in the network
+    node :: mx.SymbolicNode
 
-    content_repr :: Array{mx.NDArray,1} # static ReLU outputs
-    content_grad :: Array{mx.NDArray,1} # L2 gradients
-    content_out  :: Array{mx.NDArray,1} # transient ReLU outputs
+    # Arguments and their gradients (provided to create Executor)
+    arg_map :: Dict{Symbol, mx.NDArray}
+    grad_map :: Dict{Symbol, mx.NDArray}
 
-    style_repr :: Array{mx.NDArray,1} # static Gramian matrices
+    # Parallel arrays
+    style_repr :: Array{mx.NDArray,1} # Gramian matrices
     style_grad :: Array{mx.NDArray,1} # L2 gradients
-    style_out  :: Array{mx.NDArray,1} # transient Gramian matrices
+    content_repr :: Array{mx.NDArray,1} # ReLU outputs
+    content_grad :: Array{mx.NDArray,1} # L2 gradients
 
-    # Shapes of inputs to Gramian layers
-    style_shapes :: Array{Tuple,1}
+    # Total Variation gradient for image
+    tv_grad :: mx.NDArray
+
+    # Needed for style gradient normalization
+    style_out_shapes :: Array{Tuple,1}
 
     function StyleNet(ctx, content_img, style_img, content_layers, style_layers)
+        style_arr = preprocess_vgg(style_img)
         content_arr = preprocess_vgg(content_img)
         content_size = size(content_arr)
 
-        # Get symbolic nodes for loss from VGGNet layers
-        content_nodes, style_nodes =
-            vcat(content_layers, style_layers) |> make_vggnet
-        content_group = mx.Group(content_nodes...)
-        style_group = mx.Group(style_nodes...)
+        num_content = size(content_layers, 1)
+        num_style = size(style_layers, 1)
 
-        # Get shapes of arguments and style ReLU outputs
-        loss_group = mx.Group(content_group, style_group)
-        arg_shapes, = mx.infer_shape(loss_group, img_data=content_size)
-        ~, style_shapes, = mx.infer_shape(style_group, img_data=content_size)
+        # Get symbolic nodes for loss from VGGNet layers
+        loss_nodes = vcat(content_layers, style_layers) |> make_vggnet
+
+        arg_shapes, out_shapes, =
+            mx.infer_shape(mx.Group(loss_nodes...), img_data=content_size)
 
         # Replace style layer outputs with Gramian outputs
-        node = content_group
-        for (i, layer) in enumerate(style_nodes)
-            node = mx.Group(node, make_gramian(layer, style_shapes[i]))
+        node = mx.Group(loss_nodes[1:num_content]...)
+        for (i, layer) in enumerate(loss_nodes[num_content+1:end])
+            gram = make_gramian(layer, out_shapes[num_content + i])
+            node = mx.Group(node, gram)
         end
 
         # Allocate GPU memory for arguments and their gradients
         arg_names = mx.list_arguments(node)
         arg_map, grad_map =
-            load_arguments(ctx, arg_names, arg_shapes, "model/vgg19.params")
+            load_arguments(ctx, arg_names, arg_shapes, "vgg19.params")
 
         # Finalize network / make executor
         exec = mx.bind(node, ctx, arg_map, args_grad=grad_map)
 
-        # Separate outputs for convenience
-        num_content = size(content_layers, 1)
-        content_out = exec.outputs[1:num_content]
-        num_style = size(style_layers, 1)
-        style_out = exec.outputs[num_content+1:end]
-
         # Allocate GPU memory for output gradients
-        content_grad = map(x -> mx.zeros(size(x), ctx), content_out)
-        style_grad = map(x -> mx.zeros(size(x), ctx), style_out)
-
-        # Get ReLU output for content image
-        img = arg_map[:img_data]
-        img[:] = content_arr
-        mx.forward(exec)
-        content_repr = map(x -> copy(x, ctx), content_out)
+        style_grad =
+            map(x -> mx.zeros(size(x), ctx), exec.outputs[num_content+1:end])
+        content_grad =
+            map(x -> mx.zeros(size(x), ctx), exec.outputs[1:num_content])
 
         # Get Gramian matrices for style image
-        img[:] = preprocess_vgg(style_img)
+        arg_map[:img_data][:] = style_arr
         mx.forward(exec)
-        style_repr = map(x -> copy(x, ctx), style_out)
+        style_repr = map(x -> copy(x, ctx), exec.outputs[num_content+1:end])
+    
+        # Get ReLU output for content image
+        arg_map[:img_data][:] = content_arr
+        mx.forward(exec)
+        content_repr = map(x -> copy(x, ctx), exec.outputs[1:num_content])
 
-        # Initialize image to noise for optimization
-        img[:] = mx.rand(-0.1, 0.1, size(content_arr))
+        # Initialize data to noise for optimization
+        arg_map[:img_data][:] = mx.rand(-0.1, 0.1, content_size)
 
-        return new(ctx, exec, img, grad_map[:img_data], content_repr,
-            content_grad, content_out, style_repr, style_grad, style_out,
-            style_shapes)
+        return new(ctx, exec, node, arg_map, grad_map,
+            style_repr, style_grad, content_repr, content_grad,
+            mx.zeros(content_size, ctx), out_shapes)
     end
 end
 
-function optimize(net :: StyleNet)
-    # Create SGD optimizer for image updates
-    lr = mx.LearningRate.Fixed(0.1)
+# Assume there's only one Julia process using the GPU
+getmem() = pipeline(`nvidia-smi`,`grep julia`) |> readall |> split |> x->x[end-1]
+
+function optimize(net :: StyleNet, option_map)
     sgd = mx.SGD(
         lr = 0.1,
         momentum = 0.9,
         weight_decay = 0.005,
-        lr_scheduler = lr,
         grad_clip = 10)
-    sgd_state = mx.create_state(sgd, 0, net.img)
-    sgd.state = mx.OptimizationState(10)
+    sgd_state = mx.create_state(sgd, 0, net.arg_map[:img_data])
+    sgd.state = mx.OptimizationState(1)
 
-    for epoch = 1:25
+    for epoch = 1:500
         mx.forward(net.exec)
 
         # Calculate output gradients
         num_content = size(net.content_repr, 1)
         num_style = size(net.style_repr, 1)
-        for i, grad in enumerate(net.content_grad)
-            grad[:] = net.content_out[i] - net.content_repr[i]
+        for i = 1:num_content
+            net.content_grad[i][:] = (net.exec.outputs[i] - net.content_repr[i])
+            net.content_grad[i][:] *= parse(option_map["--content_weight"])
         end
-        for i, grad in enumerate(net.style_grad)
-            grad[:] = net.style_out[i] - net.style_repr[i]
-            grad[:] /=
-                (net.style_shapes[i][3]) * reduce(*, net.style_shapes[i][1:3])
+        for i = 1:num_style
+            net.style_grad[i][:] =
+                net.exec.outputs[num_content+i] - net.style_repr[i]
+            net.style_grad[i][:] /=
+                (net.style_out_shapes[num_content+i][3] ^ 2) *
+                reduce(*, net.style_out_shapes[num_content+i][1:2])
+            net.style_grad[i][:] *= parse(option_map["--style_weight"])
         end
 
         mx.backward(net.exec, vcat(net.content_grad, net.style_grad))
 
         # Update image
-        mx.update(sgd, 0, net.img, net.img_grad, sgd_state)
+        mx.update(
+            sgd, 0, net.arg_map[:img_data], net.grad_map[:img_data], sgd_state)
+
+        # Copying from the pipeline allows the process to block each iteration
+        # (for logging purposes)
+        new_img = copy(net.arg_map[:img_data])
+        if epoch % 20 == 0
+            save("output/out$epoch.png",
+                net.arg_map[:img_data] |> copy |> postprocess_vgg)
+        end
+        println("epoch $epoch, GPU RAM $(getmem())")
     end
 
     # Convert NDArray into Image
-    return net.img |> copy |> postprocess_vgg
+    return net.arg_map[:img_data] |> copy |> postprocess_vgg
 end
 
 function load_arguments(
@@ -135,7 +148,7 @@ function load_arguments(
         Dict(zip(arg_names, [mx.zeros(shape, ctx) for shape in arg_shapes]))
 
     # Copy pre-trained weights and biases into new NDArrays
-    for name in arg_names[2:end] # skip :img_data
+    for name in arg_names[2:end] # skip :data
         arg_map[name] = pretrain[symbol("arg:" * string(name))]
     end
 

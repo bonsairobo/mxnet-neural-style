@@ -21,14 +21,10 @@ function postprocess_vgg(arr)
     arr[:,:,3] += mean_rgb[3]
     img = convert(Image{RGB{Float32}}, clamp(arr / 256, 0, 1))
 
-    # `convert` from array gives the image column-major ordering, but most
-    # image formats require row-major ordering
-    img["spatialorder"] = ["x", "y"]
-
     return img
 end
 
-function make_vggnet(content_loss_sym, style_loss_sym)
+function make_vggnet(loss_symbols)
     # VGG model without fully-connected layers. Use AVG pooling for smoother
     # image optimization. Each layer has an explicit name to match a pretrained
     # model.
@@ -116,7 +112,5 @@ function make_vggnet(content_loss_sym, style_loss_sym)
     )
 
     # Get nodes for loss symbols
-    content_nodes = map(s -> nodes[s], content_loss_sym)
-    style_nodes = map(s -> nodes[s], style_loss_sym)
-    return (content_nodes, style_nodes)
+    return map(s -> nodes[s], loss_symbols)
 end
