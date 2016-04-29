@@ -121,7 +121,7 @@ function optimize(net :: StyleNet, option_map)
         # Copying from the pipeline allows the process to block each iteration
         # (for logging purposes)
         new_img = copy(net.arg_map[:img_data])
-        if epoch % 20 == 0
+        if epoch % 20 == 1
             save("output/out$epoch.png",
                 net.arg_map[:img_data] |> copy |> postprocess_vgg)
         end
